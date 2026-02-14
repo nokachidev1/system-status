@@ -1,24 +1,267 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>System Status</title>
-  <link rel="stylesheet" href="style.css">
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>System Status</title>
+
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+
+<style>
+:root {
+  --bg: #0f1115;
+  --fg: #eaeaf0;
+  --sign: #1a1d24;
+}
+
+body {
+  margin: 0;
+  height: 100vh;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: system-ui, sans-serif;
+  overflow: hidden;
+}
+
+/* Sign */
+.sign {
+  position: fixed;
+  top: 30px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--sign);
+  padding: 24px 36px;
+  border-radius: 16px;
+  border: 5px solid #d32f2f;
+  text-align: center;
+  transform-origin: top center;
+  transition: transform 0.4s;
+  z-index: 10;
+}
+
+.sign.closed {
+  opacity: 0.7;
+  border-color: #777;
+}
+
+.sign.swing {
+  animation: swing 3s ease-in-out;
+}
+
+@keyframes swing {
+  0% { transform: translateX(-50%) rotate(0); }
+  25% { transform: translateX(-50%) rotate(8deg); }
+  50% { transform: translateX(-50%) rotate(-6deg); }
+  75% { transform: translateX(-50%) rotate(4deg); }
+  100% { transform: translateX(-50%) rotate(0); }
+}
+
+/* Drink */
+#drink {
+  position: fixed;
+  bottom: 80px;
+  right: 40px;
+  font-size: 3rem;
+  cursor: pointer;
+}
+
+#meter {
+  position: fixed;
+  bottom: 40px;
+  right: 40px;
+  width: 40px;
+  height: 80px;
+  border: 2px solid #999;
+}
+
+#fill {
+  background: #6ee7f9;
+  width: 100%;
+  height: 100%;
+  transition: height 0.3s;
+}
+
+/* Cats */
+.cat {
+  position: absolute;
+  bottom: 0;
+  width: 90px;
+  animation: walk linear infinite;
+}
+
+.cat.alpha {
+  width: 120px;
+  filter: drop-shadow(0 0 10px rgba(255,200,200,0.6));
+}
+
+@keyframes walk {
+  from { left: -120px; }
+  to { left: 110vw; }
+}
+
+/* Rain + lightning */
+#rain, #lightning {
+  pointer-events: none;
+  position: fixed;
+  inset: 0;
+}
+
+.drop {
+  position: absolute;
+  width: 2px;
+  height: 18px;
+  background: rgba(180,200,255,0.6);
+  animation: fall 0.7s linear infinite;
+}
+
+@keyframes fall {
+  to { transform: translateY(110vh); }
+}
+
+#lightning {
+  background: white;
+  opacity: 0;
+  transition: opacity 0.1s;
+}
+
+/* Drama text */
+.drama {
+  position: fixed;
+  bottom: 160px;
+  left: 50%;
+  transform: translateX(-50%);
+  opacity: 0.7;
+  animation: fade 4s forwards;
+}
+
+@keyframes fade {
+  to { opacity: 0; transform: translateX(-50%) translateY(-20px); }
+}
+
+/* Peaceful mode */
+.peaceful body {}
+.peaceful .cat { animation-duration: 40s !important; }
+.peaceful .sign { box-shadow: 0 0 40px rgba(180,220,255,0.25); }
+</style>
 </head>
+
 <body>
 
-<div class="sign">
-  <h1 id="signText">OPEN</h1>
-  <button id="toggleBtn">Toggle</button>
-  <p id="timestamp"></p>
+<div id="rain"></div>
+<div id="lightning"></div>
+
+<div id="sign" class="sign">
+  <h1 id="title">STATUS</h1>
+  <div id="content">Loading…</div>
+  <div id="time"></div>
 </div>
 
-<div id="drinkContainer">
-  <div id="drink">🧋</div>
-  <div id="liquid"></div>
-</div>
+<div id="drink">🧋</div>
+<div id="meter"><div id="fill"></div></div>
 
-<script src="script.js"></script>
+<script>
+/* -------- STATUS -------- */
+fetch("status.md").then(r=>r.text()).then(t=>{
+  const lines=t.split("\n");
+  const status=lines[0].toUpperCase();
+  title.textContent=status.includes("CLOSED")?"CLOSED":"OPEN";
+  if(status.includes("CLOSED")) sign.classList.add("closed");
+  content.innerHTML=marked.parse(lines.slice(1).join("\n"));
+  time.textContent="Updated: "+new Date().toLocaleString();
+});
+
+/* -------- DRINK -------- */
+let level=100;
+const drinks=[
+  {e:"🧋",l:true},{e:"☕",l:false},{e:"🥤",l:false},
+  {e:"🧃",l:false},{e:"🥛",l:true},{e:"🍫",l:true}
+];
+const current=drinks[Math.floor(Math.random()*drinks.length)];
+drink.textContent=current.e;
+
+drink.onclick=()=>{
+  if(level<=0)return;
+  new Audio("https://actions.google.com/sounds/v1/cartoon/slurp.ogg").play();
+  level-=10; fill.style.height=level+"%";
+};
+
+/* Midnight refill */
+(function refillAtMidnight(){
+  const now=new Date();
+  setTimeout(()=>{
+    level=100; fill.style.height="100%";
+    refillAtMidnight();
+  },new Date(now.getFullYear(),now.getMonth(),now.getDate()+1)-now);
+})();
+
+/* -------- RAIN + THUNDER -------- */
+let rainOn=false;
+function toggleRain(){
+  rainOn=!rainOn;
+  rain.innerHTML="";
+  if(rainOn){
+    for(let i=0;i<120;i++){
+      const d=document.createElement("div");
+      d.className="drop";
+      d.style.left=Math.random()*100+"vw";
+      rain.appendChild(d);
+    }
+  }
+}
+setInterval(()=>{ if(Math.random()<0.2) toggleRain(); },30000);
+
+function thunder(){
+  lightning.style.opacity=0.8;
+  setTimeout(()=>lightning.style.opacity=0,120);
+  new Audio("https://actions.google.com/sounds/v1/weather/thunder_crack.ogg").play();
+  sign.classList.add("swing");
+  setTimeout(()=>sign.classList.remove("swing"),3000);
+}
+setInterval(()=>{ if(rainOn && Math.random()<0.4) thunder(); },15000);
+
+/* -------- CATS -------- */
+const catImgs=["orange","tuxedo","white","gray","calico"];
+function spawnCat(alpha=false){
+  const c=document.createElement("img");
+  c.src="cats/"+catImgs[Math.floor(Math.random()*catImgs.length)]+".png";
+  c.className="cat"+(alpha?" alpha":"");
+  c.style.animationDuration=(alpha?10:20+Math.random()*10)+"s";
+  document.body.appendChild(c);
+  setTimeout(()=>c.remove(),25000);
+}
+setInterval(()=>spawnCat(),8000);
+setInterval(()=>{ if(Math.random()<0.1) spawnCat(true); },40000);
+
+/* -------- GHOST DRAMA -------- */
+const ghosts=[
+  "👻 someone just drank boba",
+  "👻 a cat knocked the sign",
+  "👻 rain startled the cats"
+];
+setInterval(()=>{
+  const g=document.createElement("div");
+  g.className="drama";
+  g.textContent=ghosts[Math.floor(Math.random()*ghosts.length)];
+  document.body.appendChild(g);
+  setTimeout(()=>g.remove(),4000);
+},18000);
+
+/* -------- PEACEFUL MODE -------- */
+let peaceful=false;
+setInterval(()=>{
+  if(!peaceful && Math.random()<0.03){
+    peaceful=true;
+    document.documentElement.classList.add("peaceful");
+    rainOn=false; rain.innerHTML="";
+    level=100; fill.style.height="100%";
+    const p=document.createElement("div");
+    p.className="drama";
+    p.textContent="🌤️ peaceful morning";
+    document.body.appendChild(p);
+    setTimeout(()=>p.remove(),10000);
+  }
+},60000);
+</script>
+
 </body>
 </html>
